@@ -23,34 +23,33 @@ class Player {}
 
 const ecs = new ECS();
 
-ecs.registerComponentType(Position)
-	.registerComponentType(Title)
-	.registerComponentType(Player)
-	.registerComponentType(Enemy);
+ecs.registerComponentTypes(Position, Title, Enemy, Player);
 
-ecs.createResource(Time, new Time(0, 0, 0));
+ecs.createResource(new Time(0, 0, 0));
 
-ecs.registerSystems(updateTime, move, printPosition, loop);
+ecs.registerSystems(setup, updateTime, move, printPosition, loop);
 
-ecs.entity().add(new Player(), new Position(25, 25));
+function setup(ecs: ECS) {
+	ecs.entity().add(new Player(), new Position(0, 25));
 
-for (let i = 0; i < 10000; i++) {
-	ecs.entity().add(
-		new Enemy(),
-		new Title(`Enemy ${i + 1}`),
-		new Position(
-			Math.floor(Math.random() * 100),
-			Math.floor(Math.random() * 100)
-		)
-	);
+	for (let i = 0; i < 10000; i++) {
+		ecs.entity().add(
+			new Enemy(),
+			new Title(`Enemy ${i + 1}`),
+			new Position(
+				Math.floor(Math.random() * 100),
+				Math.floor(Math.random() * 100)
+			)
+		);
 
-	ecs.entity().add(
-		new Enemy(),
-		new Position(
-			Math.floor(Math.random() * 100),
-			Math.floor(Math.random() * 100)
-		)
-	);
+		ecs.entity().add(
+			new Enemy(),
+			new Position(
+				Math.floor(Math.random() * 100),
+				Math.floor(Math.random() * 100)
+			)
+		);
+	}
 }
 
 function updateTime(ecs: ECS) {
@@ -68,8 +67,8 @@ function move(ecs: ECS, time: Time) {
 	const positions: Position[] = ecs.queryComponents(Position, With(Player));
 
 	positions.forEach((p) => {
-		p.x += 1 * time.delta;
-		p.y += 15 * time.delta;
+		p.x += (1 * time.delta) / 1000;
+		p.y += (15 * time.delta) / 1000;
 	});
 }
 
@@ -80,7 +79,7 @@ function printPosition(ecs: ECS) {
 }
 
 function loop(ecs: ECS) {
-	requestAnimationFrame(ecs.run.bind(ecs));
+	requestAnimationFrame(ecs.run.bind(ecs, updateTime));
 }
 
 ecs.run();

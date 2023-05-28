@@ -1,17 +1,12 @@
 import { EntityControls } from './entityControls';
 
 export type CompType = new (...args: any[]) => any;
-export type Executor = (ecs: ECS, ...args: any) => any[] | void;
-export type System = {
-	executor: Executor;
-	name: string;
-	enabled: boolean;
-};
+export type System = (ecs: ECS, ...args: any) => any[] | void;
 
 export type Plugin = {
 	components: CompType[];
 	sets: {
-		[key: string]: Executor[];
+		[key: string]: System[];
 	};
 };
 
@@ -30,11 +25,14 @@ export class ECS {
 	private components: {
 		[key: string]: any[];
 	};
-	private nextEID: number;
-
-	private systems: System[];
-
+	private systems: {
+		executor: System;
+		name: string;
+		enabled: boolean;
+	}[];
 	private resources: Map<CompType, any>;
+
+	private nextEID: number;
 
 	constructor() {
 		this.components = {};
@@ -48,39 +46,39 @@ export class ECS {
 		const name = component.name;
 
 		this.components[name] = [];
-
-		return this;
 	}
 
-	registerSystem(executor: Executor) {
-		const system: System = {
+	registerSystem(system: System) {
+		this.systems.push({
 			enabled: true,
-			name: executor.name,
-			executor,
-		};
-
-		this.systems.push(system);
-
-		return this;
+			name: system.name,
+			executor: system,
+		});
 	}
 
-	registerSystems(...executors: Executor[]) {
-		executors.forEach((executor) => this.registerSystem(executor));
+	registerComponentTypes(...comps: CompType[]) {
+		comps.forEach((c) => this.registerComponentType(c));
 	}
 
-	toggleSystem(executor: Executor | string) {
-		const exec = typeof executor === 'string' ? executor : executor.name;
+	registerSystems(...systems: System[]) {
+		systems.forEach((s) => this.registerSystem(s));
+	}
 
-		const system = this.systems.find(({ name }) => name === exec);
+	toggleSystem(system: System | string) {
+		const sysname = typeof system === 'string' ? system : system.name;
 
-		if (system === undefined) {
-			throw new Error(`System [${exec}] is not registered`);
+		const sys = this.systems.find(({ name }) => name === sysname);
+
+		if (sys === undefined) {
+			throw new Error(`System [${sysname}] is not registered`);
 		} else {
-			system.enabled = !system.enabled;
+			sys.enabled = !sys.enabled;
 		}
 	}
 
-	createResource(type: CompType, resource: any) {
+	createResource(resource: any) {
+		const type: CompType = resource.constructor;
+
 		if (this.resources.get(type) !== undefined) {
 			throw new Error(`Resource of type [${type.name}] already exists`);
 		}
@@ -107,6 +105,8 @@ export class ECS {
 	destroy(entity: number) {
 		for (let key in this.components) {
 			delete this.components[key][entity];
+			this.components[key].splice(entity, 1);
+			this.nextEID--;
 		}
 	}
 
@@ -153,14 +153,25 @@ export class ECS {
 
 	// queryEntities(...mods: CompTypeMod[]): any[] {}
 
-	run(...args: any) {
+	run(start?: System, ...args: any[]) {
 		let out = undefined;
+		let startIndex = 0;
 
-		if (this.systems[0].enabled) {
-			out = this.systems[0].executor(this, ...args);
+		if (start) {
+			startIndex = this.systems.findIndex(
+				({ executor }) => executor === start
+			);
+
+			if (startIndex === -1) {
+				throw new Error(`System [${start.name}]`);
+			}
 		}
 
-		for (let i = 1; i < this.systems.length; i++) {
+		if (this.systems[startIndex].enabled) {
+			out = this.systems[startIndex].executor(this, ...args);
+		}
+
+		for (let i = startIndex + 1; i < this.systems.length; i++) {
 			if (!this.systems[i].enabled) {
 				out = undefined;
 				continue;
