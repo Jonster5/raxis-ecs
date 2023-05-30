@@ -164,6 +164,11 @@ postcss@^8.4.23:
     picocolors "^1.0.0"
     source-map-js "^1.0.2"
 
+raxis-core@^0.2.3:
+  version "0.2.3"
+  resolved "https://registry.yarnpkg.com/raxis-core/-/raxis-core-0.2.3.tgz#48dbe9742c9a17c424f9c1614b78588de69ab018"
+  integrity sha512-brJYD9tTaLLY79fRJ8pRNigLWcGsMXbRH6+TxDGS1R62zy59gaS+BXMsfNZF98ujTHpNjcUiLzG6HBrAN/SwCA==
+
 rollup@^3.21.0:
   version "3.21.7"
   resolved "https://registry.yarnpkg.com/rollup/-/rollup-3.21.7.tgz#022ab47416712c93546f369abfb20da5fb8ed42e"

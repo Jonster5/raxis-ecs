@@ -1,14 +1,13 @@
 import { EntityControls } from './entityControls';
 
 export type CompType = new (...args: any[]) => any;
-export type System = (ecs: ECS, ...args: any) => any[] | void;
+export type System = (ecs: ECS) => any[] | void;
 
-export type Plugin = {
+export interface Plugin {
 	components: CompType[];
-	sets: {
-		[key: string]: System[];
-	};
-};
+	startup: System[];
+	systems: System[];
+}
 
 export type CompTypeMod = () => [CompType, ModType];
 export type ModType = 'with' | 'without';
@@ -25,6 +24,12 @@ export class ECS {
 	private components: {
 		[key: string]: any[];
 	};
+	private entities: number[];
+	private startSystems: {
+		executor: System;
+		name: string;
+		enabled: boolean;
+	}[];
 	private systems: {
 		executor: System;
 		name: string;
@@ -32,13 +37,18 @@ export class ECS {
 	}[];
 	private resources: Map<CompType, any>;
 
+	private updater!: number | null;
+
 	private nextEID: number;
 
 	constructor() {
 		this.components = {};
+		this.entities = [];
+		this.startSystems = [];
 		this.systems = [];
 		this.resources = new Map();
 
+		this.updater = null;
 		this.nextEID = 0;
 	}
 
@@ -56,12 +66,24 @@ export class ECS {
 		});
 	}
 
+	registerStartupSystem(system: System) {
+		this.startSystems.push({
+			enabled: true,
+			name: system.name,
+			executor: system,
+		});
+	}
+
 	registerComponentTypes(...comps: CompType[]) {
 		comps.forEach((c) => this.registerComponentType(c));
 	}
 
 	registerSystems(...systems: System[]) {
 		systems.forEach((s) => this.registerSystem(s));
+	}
+
+	registerStartupSystems(...systems: System[]) {
+		systems.forEach((s) => this.registerStartupSystem(s));
 	}
 
 	toggleSystem(system: System | string) {
@@ -76,7 +98,7 @@ export class ECS {
 		}
 	}
 
-	createResource(resource: any) {
+	insertResource(resource: any) {
 		const type: CompType = resource.constructor;
 
 		if (this.resources.get(type) !== undefined) {
@@ -94,20 +116,36 @@ export class ECS {
 		return this;
 	}
 
+	insertPlugin(plugin: Plugin) {
+		this.registerComponentTypes(...plugin.components);
+		this.registerStartupSystems(...plugin.startup);
+		this.registerSystems(...plugin.systems);
+	}
+
 	entity() {
-		return new EntityControls(this, this.components, this.nextEID++);
+		const eid = this.nextEID++;
+
+		this.entities.push(eid);
+
+		return new EntityControls(this, this.components, eid);
 	}
 
 	controls(eid: number) {
 		return new EntityControls(this, this.components, eid);
 	}
 
-	destroy(entity: number) {
-		for (let key in this.components) {
-			delete this.components[key][entity];
-			this.components[key].splice(entity, 1);
-			this.nextEID--;
+	destroy(eid: number) {
+		const index = this.entities.indexOf(eid);
+
+		if (index === -1) {
+			throw new Error(`Entity does not exist`);
 		}
+
+		for (let key in this.components) {
+			delete this.components[key][eid];
+		}
+
+		this.entities.splice(index, 1);
 	}
 
 	getResource(type: CompType) {
@@ -151,34 +189,69 @@ export class ECS {
 		return retrieval.map(({ comp }) => comp);
 	}
 
-	// queryEntities(...mods: CompTypeMod[]): any[] {}
+	queryEntities(mod: CompTypeMod, ...othermods: CompTypeMod[]): number[] {
+		let retrieval = [...this.entities];
 
-	run(start?: System, ...args: any[]) {
-		let out = undefined;
-		let startIndex = 0;
+		const [comp, type] = mod();
 
-		if (start) {
-			startIndex = this.systems.findIndex(
-				({ executor }) => executor === start
+		if (type === 'with') {
+			retrieval = retrieval.filter(
+				(eid) => this.components[comp.name][eid] !== undefined
 			);
+		} else {
+			retrieval = retrieval.filter(
+				(eid) => this.components[comp.name][eid] === undefined
+			);
+		}
 
-			if (startIndex === -1) {
-				throw new Error(`System [${start.name}]`);
+		for (let mod of othermods) {
+			const [comp, type] = mod();
+
+			if (type === 'with') {
+				retrieval = retrieval.filter(
+					(eid) => this.components[comp.name][eid] !== undefined
+				);
+			} else {
+				retrieval = retrieval.filter(
+					(eid) => this.components[comp.name][eid] === undefined
+				);
 			}
 		}
 
-		if (this.systems[startIndex].enabled) {
-			out = this.systems[startIndex].executor(this, ...args);
+		return retrieval;
+	}
+
+	run() {
+		this.startup();
+
+		this.update();
+	}
+
+	startup() {
+		for (let i = 0; i < this.startSystems.length; i++) {
+			if (!this.startSystems[i].enabled) continue;
+
+			this.startSystems[i].executor(this);
+		}
+	}
+
+	update() {
+		for (let i = 0; i < this.systems.length; i++) {
+			if (!this.systems[i].enabled) continue;
+
+			this.systems[i].executor(this);
 		}
 
-		for (let i = startIndex + 1; i < this.systems.length; i++) {
-			if (!this.systems[i].enabled) {
-				out = undefined;
-				continue;
-			}
+		this.updater = requestAnimationFrame(this.update.bind(this));
+	}
 
-			if (out) out = this.systems[i].executor(this, ...out);
-			else out = this.systems[i].executor(this);
+	stop() {
+		if (!this.updater) {
+			throw new Error(`ECS is not running`);
 		}
+
+		cancelAnimationFrame(this.updater);
+
+		this.updater = null;
 	}
 }

@@ -1,4 +1,4 @@
-import { ECS, With, Without } from './ecs';
+import { ECS, With, Without, Plugin } from './ecs';
 import './style.css';
 
 class Position {
@@ -23,13 +23,15 @@ class Player {}
 
 const ecs = new ECS();
 
-ecs.registerComponentTypes(Position, Title, Enemy, Player);
-
-ecs.createResource(new Time(0, 0, 0));
-
-ecs.registerSystems(setup, updateTime, move, printPosition, loop);
+const plugin: Plugin = {
+	components: [Position, Title, Enemy, Player],
+	startup: [setup],
+	systems: [updateTime, move, printPosition],
+};
 
 function setup(ecs: ECS) {
+	ecs.insertResource(new Time(0, 0, 0));
+
 	ecs.entity().add(new Player(), new Position(0, 25));
 
 	for (let i = 0; i < 10000; i++) {
@@ -59,12 +61,11 @@ function updateTime(ecs: ECS) {
 	time.delta = now - time.then;
 	time.elapsed += time.delta;
 	time.then = now;
-
-	return [time];
 }
 
-function move(ecs: ECS, time: Time) {
+function move(ecs: ECS) {
 	const positions: Position[] = ecs.queryComponents(Position, With(Player));
+	const time = ecs.getResource(Time);
 
 	positions.forEach((p) => {
 		p.x += (1 * time.delta) / 1000;
@@ -74,12 +75,11 @@ function move(ecs: ECS, time: Time) {
 
 function printPosition(ecs: ECS) {
 	const positions: Position[] = ecs.queryComponents(Position, With(Player));
+	const player = ecs.queryEntities(With(Player));
 
-	console.log(positions[0].x);
+	console.log(ecs.controls(player[0]).getComponent(Position).x);
 }
 
-function loop(ecs: ECS) {
-	requestAnimationFrame(ecs.run.bind(ecs, updateTime));
-}
+ecs.insertPlugin(plugin);
 
 ecs.run();
