@@ -42,6 +42,8 @@ export class EntityControls {
 		}
 
 		this.components[name][this.eid] = component;
+
+		return this;
 	}
 
 	getComponent(component: CompType) {
@@ -66,6 +68,8 @@ export class EntityControls {
 
 	add(...components: any[]) {
 		components.forEach((c) => this.addComponent(c));
+
+		return this;
 	}
 
 	get(...components: CompType[]) {

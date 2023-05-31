@@ -3,10 +3,11 @@ import { EntityControls } from './entityControls';
 export type CompType = new (...args: any[]) => any;
 export type System = (ecs: ECS) => any[] | void;
 
-export interface Plugin {
-	components: CompType[];
-	startup: System[];
-	systems: System[];
+export interface ECSPlugin {
+	components?: CompType[];
+	startup?: System[];
+	systems?: System[];
+	resources?: any[];
 }
 
 export type CompTypeMod = () => [CompType, ModType];
@@ -116,10 +117,24 @@ export class ECS {
 		return this;
 	}
 
-	insertPlugin(plugin: Plugin) {
-		this.registerComponentTypes(...plugin.components);
-		this.registerStartupSystems(...plugin.startup);
-		this.registerSystems(...plugin.systems);
+	insertPlugin(plugin: ECSPlugin) {
+		if (plugin.resources) {
+			plugin.resources.forEach((r) => this.insertResource(r));
+		}
+
+		if (plugin.components) {
+			this.registerComponentTypes(...plugin.components);
+		}
+
+		if (plugin.startup) {
+			this.registerStartupSystems(...plugin.startup);
+		}
+
+		if (plugin.systems) {
+			this.registerSystems(...plugin.systems);
+		}
+
+		return this;
 	}
 
 	entity() {
